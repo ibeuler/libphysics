@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 # ## test_mechanics.py
 
 """
@@ -42,9 +42,10 @@ class sets:
     """
     Setttings class.
         
-    Instead of settings class, settings nametuble might be used.
+    Instead of settings class, settings nametuple might be used.
     Settings = namedtuple("Settings", "type dropinf delta")
     sets = Settings(type="symbolic", dropinf=True, delta=0.1)
+    print(set.type)
     """
     global dictflow, test_all
     
@@ -59,7 +60,7 @@ class sets:
     plot_time_scale = {1:"xy", 2:"xz", 3:"yz"}[3]
     
     # Execution settings.
-    test_all = {0:False, 1:True}[1]
+    test_all = {0:False, 1:True}[0]
     dictflow = {100:"get_formulary", 150:"get_subformulary",
                 200:"simple_harmonic_oscillator_scalar", 201:"simple_harmonic_oscillator_vectorial", 
                 2321:"coordinate_systems",

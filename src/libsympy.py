@@ -1,7 +1,13 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 """
 libsympy.py
+
+Requirements
+============
+pip3 install latex2sympy2 # This also installs antlr4-python3-runtime==4.11 
+pip3 install antlr4-python3-runtime==4.11 # Only for using parse_latex method.
+              
 
 Usage
 =====
@@ -20,26 +26,42 @@ for ipath in lstPaths:
 from libsympy import *
 """
 import matplotlib.pyplot as plt
-from matplotlib.colors import LightSource
+import matplotlib.pyplot as plt
 import mpmath as mp
 import numpy as np
 import scipy.constants as pc
+
+from matplotlib.colors import LightSource
 from pylab import *
 from sympy import *
 from sympy.abc import x,y,z,t
 from sympy.integrals.manualintegrate import manualintegrate
 from sympy.plotting import *
 from sympy.solvers.ode import *
-from sympy import sympify
 from sympy.vector import *
+from sympy import sympify
 
 # Initiate rendering Latex, HTML, Math etc.
 from IPython import get_ipython
 from IPython.display import display, HTML, Latex, Math
 from sympy.parsing.latex import parse_latex
+from sympy.parsing.sympy_parser import parse_expr
 from sympy.interactive import printing
 printing.init_printing()
 
+
+# Sets global defaults for all plots
+plt.rcParams.update({
+    'font.family': "serif",
+    'font.size': 14,          # Global font size
+    'axes.labelsize': 15,     # X and Y label size
+    'xtick.labelsize': 14,    # X tick size
+    'ytick.labelsize': 14,    # Y tick size
+    'legend.fontsize': 12,    # Legend size
+})
+
+# Import External Libraries
+# from latex2sympy2 import latex2sympy
 
 #----Global definitions
 # Integer symbols
@@ -152,6 +174,10 @@ def solve_odes(equations, func=y, output_style="display"):
 
 
 #----Converters
+"""
+expr = parse_latex(r"\frac{1}{2}")
+print(expr)
+"""
 def read_latex_file(file_path):
     import re
     def convert_latex_expression(latex_expression):
@@ -183,9 +209,74 @@ def read_latex_file(file_path):
     except FileNotFoundError:
         print(f"Error: File {file_path} not found.")
         return None
-       
 
 #----Functions
+from itertools import product
+def table_function(expr, eval_=False, verbose=False, **kwargs):
+    """
+    Generates a table for a sympy expression with any number of variables.
+    The order of arguments in the function call determines the nesting order.
+    
+    # 1. Define SymPy symbols
+    q, n, m = symbols('q n m')
+    
+    # 2. Create a complex expression
+    # Formula: (q * n) + m
+    my_expr = q * n + m
+    
+    # 3. Call the function with 3 variables
+    # Loop order: q (outer), then n (middle), then m (inner)
+    table_results = table_function(
+        my_expr, 
+        q=[0.1, 0.2], 
+        n=[1, 2], 
+        m=[10, 20]
+    )
+    
+    # 4. Print the table formatted nicely
+    print(f"{'q':>5} | {'n':>5} | {'m':>5} | {'Result':>10}")
+    print("-" * 35)
+    for row in table_results[1:]:  # Skip the header for custom formatting
+        print(f"{row[0]:>5} | {row[1]:>5} | {row[2]:>5} | {row[3]:>10.2f}")
+    """
+    # 1. Find the actual symbol objects used inside the expression
+    # This ensures we match 'n' even if it has special assumptions (like integer=True)
+    expr_symbols = {s.name: s for s in expr.free_symbols}
+    
+    # 2. Map the names from kwargs to the actual symbols found in the expression
+    ordered_names = list(kwargs.keys())
+    value_lists = list(kwargs.values())
+    
+    # Identify which actual symbol objects to substitute
+    # If the name isn't in the expression, we create a dummy symbol
+    subs_symbols = [expr_symbols.get(name, Symbol(name)) for name in ordered_names]
+    
+    # 3. Build the table
+    header = ordered_names + ["Result"]
+    table = [header]
+    
+    for values in product(*value_lists):
+        # Create the substitution dictionary: {Actual_Symbol_Object: Value}
+        subs_dict = dict(zip(subs_symbols, values))
+        
+        # .subs() replaces the symbol
+        # .doit() evaluates the Hermite polynomial and Factorial
+        # .evalf() converts the final expression to a decimal
+        if eval_:
+            # result = expr.subs(subs_dict).doit().evalf()
+            result = expr.xreplace(subs_dict).doit().evalf()
+        else:
+            # result = expr.subs(subs_dict)
+            result = expr.xreplace(subs_dict)
+        
+        if verbose:
+            display(result)
+        
+        table.append(list(values) + [result])
+        
+    return table
+
+
 def get_iterated_functions(f, fixed_vals={C1:0, C2:0}, prm=alpha, 
                            param_vals=np.arange(1,2,0.2)):
     """
@@ -305,10 +396,71 @@ def solve_2x2_matrix(lhsM, coeffsM, rhsM):
 #            eqs.append(ieq2)
     
     res = solve(flatten(eqs), flatten(coeffsM.tolist()), dict=True)
-    return(res)    
+    return(res)
+
+def tensor_to_product(expr):
+    """
+    from sympy import TensorProduct, Mul
+    
+    Replace TensorProduct(a, b, ...) with ordinary multiplication a*b*...
+    expr = TensorProduct(a, b) + TensorProduct(a, b, c)
+    converted = tensor_to_product(expr)
+    """
+    return expr.replace(
+        lambda x: isinstance(x, TensorProduct),
+        lambda x: Mul(*x.args)
+    )
 
 
 #----Plotting
+def plot_energy_levels(data, constYs=None, title="", line_width=0.025):
+    """
+    Plots horizontal lines at y-points grouped by x-coordinates.
+    data: List of lists [[x, n, y], ...]
+    line_width: The horizontal span of the 'little lines'
+    
+    
+    """
+    plt.figure(figsize=(9, 7))
+    
+    # Extract unique x values to help with axis formatting
+    unique_x = sorted(list(set(row[0] for row in data)))
+    
+    for x, n, y in data:
+        # Draw a horizontal line centered at x
+        # xmin and xmax define the start and end of the 'little line'
+        plt.hlines(y=y, xmin=x - line_width, xmax=x + line_width, 
+                   color='royalblue', linewidth=2.0)
+        
+        # Optional: Label each line with its 'n' value
+        plt.text(x + line_width + 0.01, y, f"n={n}", 
+                 verticalalignment='center', fontsize=10, color='black')
+    
+    if type(constYs) is not type(None):
+        for i, iy in enumerate(constYs):
+            plt.hlines(y=iy, xmin=0, xmax=1, 
+                       color=['blue','red'][i], 
+                       linewidth=1.0,
+                        label=[r'$T_c$=10 K', r'$T_h$=20 K'][i])
+            plt.text(0.9, iy+iy*0.2, [rf"$T_c$=10 K", rf"$T_h$=20 K"][i] , 
+                     verticalalignment='center', fontsize=10, color='black')
+
+    # Formatting the plot
+    plt.xticks(unique_x)
+    plt.xlabel("Deformation Parameter q")
+    plt.ylabel("Energy (meV)")
+    # plt.title(rf"{title:g}")
+    
+    # If your y-values vary greatly (e.g., 0.2 to 229), 
+    # a log scale often makes the plot much more readable:
+    plt.yscale({1:'log', 2:'linear'}[2]) 
+    
+    plt.legend(title=rf"$\nu = {title:g}$ Hz")
+    plt.grid(True, which="both", ls="-", alpha=0.2)
+    plt.savefig(f"output/libsympy/E_levels_nu={title:g}Hz.pdf", format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.05)
+    plt.show()
+    
+    
 def plot_list(plist2Ds, plabels=[1,2,3], 
               xlabel="$x$", ylabel="$y$",
               pxscale="linear", pyscale="linear", 
@@ -328,7 +480,7 @@ def plot_list(plist2Ds, plabels=[1,2,3],
     ys1 = [sin(ix) for ix in xs1]
     ys2 = [cos(ix) for ix in xs1]
     list2Ds = [[xs1, ys1], [xs1, ys2]]
-    plot_func(list2Ds, plabels=["sin(x)","cos(x)"],
+    plot_list(list2Ds, plabels=["sin(x)","cos(x)"],
               xlabel="$x$", ylabel="$y$",
               pxscale="linear", pyscale="linear",
               pgrid=False, paxis=False)
@@ -364,8 +516,10 @@ def plot_list(plist2Ds, plabels=[1,2,3],
     fig.tight_layout()
 
 
-def plot_sympfunc(pfuncs, prange=(-1,1,500), plabels=[1,2,3], xlabel="$x$", ylabel="$y$",
-                  pxscale="linear", pyscale="linear", pgrid=False, paxis=True, ptitle=""):
+def plot_sympfunc(pfuncs, prange=(-1,1,500), plabels=[1,2,3], 
+                  xlabel="$x$", ylabel="$y$",
+                  pxscale="linear", pyscale="linear", 
+                  pgrid=False, paxis=True, ptitle=""):
     """
     Plots sympy functions within a specified region.
     
@@ -378,7 +532,7 @@ def plot_sympfunc(pfuncs, prange=(-1,1,500), plabels=[1,2,3], xlabel="$x$", ylab
     Examples
     ========
 
-    f=x**2
+    f=x**3
     plot_sympfunc([f,], (-4,4,101))
     plot_sympfunc([[R_nl(i, j, b*a, Z=1/a).subs({a**(3/2):1}).evalf().subs({b:x}) for j in range(i)] for i in range(1,4)], (0, 18, 100), xlabel="$r/a$", ylabel="$R_{nl}(r)$")
     """
@@ -401,6 +555,7 @@ def plot_sympfunc(pfuncs, prange=(-1,1,500), plabels=[1,2,3], xlabel="$x$", ylab
     ax.set_title(ptitle)
     ax.legend(loc='best', frameon=True, edgecolor='black')
     ax.grid(pgrid)
+    
     # Plot axis of the origin.
     if paxis:
         plt.axvline(0, color='k')
@@ -408,6 +563,7 @@ def plot_sympfunc(pfuncs, prange=(-1,1,500), plabels=[1,2,3], xlabel="$x$", ylab
     plt.rcParams["text.usetex"]
     fig.tight_layout()
     plt.show()
+    
     
 def plot_save(pfilepath="output", ppad_inches=0.05, pformats=("png","pdf","svg")):
     """

@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 """
 template.py todo copy from mechanics!!!
 Created on Fri Mar 11 12:53:36 2022

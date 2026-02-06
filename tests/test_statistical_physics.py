@@ -1,8 +1,15 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 # ## test_statistical_physics.py
 
 """
+Information about jupytext
+==========================
+sudo pip3 install jupytext
+Convert from .py to .ipynb format
+In a notebook, do the following in a cell:
+!jupytext --to notebook <name_of_script_file>.py
+
 test_statistical_physics.py connected to test_statistical_physics.ipynb via "jupytext".
 In ipynb notebook select File->Jupytext->Pair Notebook with Light Format.
 
@@ -30,9 +37,10 @@ class sets:
     """
     Setttings class.
         
-    Instead of settings class, settings nametuble might be used.
+    Instead of settings class, settings nametuple might be used.
     Settings = namedtuple("Settings", "type dropinf delta")
     sets = Settings(type="symbolic", dropinf=True, delta=0.1)
+    print(set.type)
     """
     global dictflow, test_all
     
@@ -121,6 +129,8 @@ if "1D_1/2_paramagnet_way1" in sets.flow:
     display(M)
     
     simplify(ostat.M.evalf(subs=xreplaces).doit())
+    
+    # limM = limit(limit(M.rhs, T, 0), B, 0)
 
 # ### A Spin-1/2 Paramagnet Way2
 
@@ -215,5 +225,3 @@ if "ideal_gas_canonical" in sets.flow:
     
     ostat.ZN  = Eq( ostat.ZN.lhs, ostat.subformulary.Z_Ideal_Gas)
     display(ostat.F)
-
-

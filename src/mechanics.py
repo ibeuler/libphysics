@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 """
 mechanics.py
 Created on Fri Mar 11 12:48:37 2022
@@ -12,7 +12,7 @@ from itertools import combinations_with_replacement
 import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d.axes3d as axes3d
 from sympy import*
-from sympy import Derivative as D
+from sympy.abc import*
 from sympy.diffgeom import *
 from sympy.diffgeom.rn import *
 from sympy.diffgeom.rn import R3_r, R3_s
@@ -24,6 +24,8 @@ from sympy.physics.quantum.operator import *
 from sympy.physics.quantum.qapply import *
 from sympy.physics.vector import *
 from sympy.utilities.iterables import iterable
+
+from sympy import Derivative as D
 
 from libreflection import *
 import libphyscon as pc
@@ -137,6 +139,7 @@ class mechanics(branch):
             Define global symbols in the outer class.
             """
             def __init__(self):
+                
                 # Harmonic oscillator substitutions.
                 self.A = self.reduced_amplitude = F0/m
                 self.beta = self.damping_parameter = gamma/(2*m)
@@ -148,22 +151,51 @@ class mechanics(branch):
                 # Transformations from Polar to Cartesian Coordinates.
                 self.pol_to_cart_x = r*cos(theta)
                 self.pol_to_cart_y = r*sin(theta)
+                
                 # Transformations from Cylindrical to Cartesian Coordinates.
                 self.cyl_to_cart_x = r*sin(phi)
                 self.cyl_to_cart_y = r*sin(phi)
                 self.cyl_to_cart_z = z
+                
                 # Transformations from Spherical to Cartesian Coordinates.
                 self.sph_to_cart_x = r*sin(theta)*cos(phi)
                 self.sph_to_cart_y = r*sin(theta)*sin(phi)
                 self.sph_to_cart_z = r*cos(theta)
+                
         self.subformulary = subformulary()
         
-        class moment_of_inertia():
+        class moment_of_inertia(branch):
             """
             List of Moment of Inertia
             """
             def __init__(self):
-                self.Icm_sphere = S(2)/5*M*r**2
+                super().__init__()
+                self.name = "moment_of_inertia"
+                
+                # Define common symbols
+                M, r, a, b, L, R1, R2 = symbols('M r a b L R1 R2')
+                
+                # Solid objects (about center of mass unless specified)
+                self.I_sphere_cm = S(2)/5 * M * r**2          # Solid sphere
+                self.I_cylinder_cm = S(1)/2 * M * r**2        # Solid cylinder (central axis)
+                self.I_rod_cm = S(1)/12 * M * L**2            # Thin rod (center)
+                self.I_rod_end = S(1)/3 * M * L**2            # Thin rod (one end)
+                self.I_rect_plate_cm = S(1)/12 * M * (a**2 + b**2)  # Rectangular plate (center)
+                self.I_rect_plate_edge = S(1)/3 * M * a**2    # Rectangular plate (edge)
+                self.I_cube_cm = S(1)/6 * M * a**2            # Cube (center)
+                self.I_cube_edge = S(2)/3 * M * a**2          # Cube (edge)
+                self.I_cone_axis_cm = S(3)/10 * M * r**2      # Solid cone (central axis)
+                self.I_cone_perpendicular_cm = S(3)/20 * M * (r**2 + 4*L**2)  # Solid cone (perpendicular axis)
+                
+                # Hollow objects (thin shells or composite)
+                self.I_hollow_sphere_cm = S(2)/3 * M * r**2  # Thin spherical shell (center)
+                self.I_hollow_cylinder_cm = M * r**2          # Thin cylindrical shell (central axis)
+                self.I_hollow_ring_cm = M * r**2              # Thin ring/hoop (central axis)
+                self.I_hollow_rect_frame_cm = S(1)/12 * M * (a**2 + b**2)  # Rectangular frame (center)
+                self.I_hollow_rect_frame_edge = S(1)/3 * M * a**2  # Rectangular frame (edge)
+                self.I_hollow_cylinder_annulus_cm = M * (R1**2 + R2**2)/2  # Hollow cylinder (R1=inner, R2=outer)
+                self.I_hollow_sphere_annulus_cm = S(2)/5 * M * (R2**5 - R1**5)/(R2**3 - R1**3)  # Hollow sphere (R1=inner, R2=outer)
+                
             def __doc__(self):
                 print("List of Moment of Inertia")
         self.moment_of_inertia = moment_of_inertia()
@@ -269,7 +301,7 @@ class mechanics(branch):
         # Common text definitions.
         self.Hamiltonian = self.H
     
-#### 4) Global Methods
+#### Global Methods
 #----> Eulers_equation_sympy
     @staticmethod
     def Eulers_equation_sympy(L, funcs=(), vars=()):
@@ -506,5 +538,5 @@ class mechanics(branch):
     def __doc__():
         return("Document of mechanics class.")
         
-omech = mechanics("EulerLagrange") # Create an omech object from mechanics class.
+omech = mechanics("scalar") # Create an omech object from mechanics class.
 # omech = mechanics("scalar")

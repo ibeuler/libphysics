@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 """
 statistical_physics.py
 Created on Fri Mar 11 12:53:36 2022
@@ -82,8 +82,23 @@ class statistical_mechanics(branch):
 
 #### 1) micro_canonical_discrete_distinguihable
         if self.class_type == "micro_canonical_discrete_distinguihable":
-            if self.numeric:
+            if not self.numeric:
                 """
+                ==================
+                Analytic Formulary
+                ==================  
+                """
+                self.Zsp = Eq(symbols('Z_sp'), Sum(g*exp(-engF/(kB*T)), (i, j, n)))
+                self.ZN  = Eq(symbols('Z_N'),  self.Zsp.rhs**N)
+                self.U   = Eq(symbols('U'),   N*kB*T**2*diff(log(self.Zsp.rhs), T, evaluate=False))
+                self.S   = Eq(symbols('S'),   N*kB*log(self.Zsp.rhs) + N*kB*T*diff(log(self.Zsp.rhs), T, evaluate=False))
+                self.F   = Eq(symbols('F'),  -N*kB*T*log(self.Zsp.rhs))
+                self.Cv  = Eq(symbols('C_v'), diff(self.U.rhs, T, evaluate=False))
+                self.M   = Eq(symbols('M'),  -diff(self.F.rhs, B, evaluate=False))
+
+            elif self.numeric:
+                """
+                ================= 
                 Numeric Formulary
                 =================                
                 def nZsp(self, engF=lambda _:_, g=lambda _:1, T=1, j=1, n=mp.inf):
@@ -122,19 +137,6 @@ class statistical_mechanics(branch):
                 # kaldik todo check whether B must be an argument of the lambda function
                 self.M   = lambda engF=lambda _:_, g=lambda _:1, T=1, j=1, n=mp.inf, kB=1, N=1, point=1.0: (
                     -mp.diff(lambda B: self.F(engF, g, T, j, n, kB, N), point))
-
-            else:
-                """
-                Analytic Formulary
-                ==================  
-                """
-                self.Zsp = Eq(symbols('Z_sp'), Sum(g*exp(-engF/(kB*T)), (i, j, n)))
-                self.ZN  = Eq(symbols('Z_N'),  self.Zsp.rhs**N)
-                self.U   = Eq(symbols('U'),   N*kB*T**2*diff(log(self.Zsp.rhs), T, evaluate=False))
-                self.S   = Eq(symbols('S'),   N*kB*log(self.Zsp.rhs) + N*kB*T*diff(log(self.Zsp.rhs), T, evaluate=False))
-                self.F   = Eq(symbols('F'),  -N*kB*T*log(self.Zsp.rhs))
-                self.Cv  = Eq(symbols('C_v'), diff(self.U.rhs, T, evaluate=False))
-                self.M   = Eq(symbols('M'),  -diff(self.F.rhs, B, evaluate=False))
             
 
 #### 2) micro_canonical_discrete_indistinguihable

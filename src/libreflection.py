@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 """
 libreflection.py
 Created on Fri Mar 11 12:53:02 2022
@@ -468,6 +468,7 @@ class branch:
             strcode = "{0}({1}, {2})".format(expr, cmd.__name__, params)
 
         self.codes.append(strcode+'\n')
+        
         if self.verbose:
             print(strcode)
         libsympy.pprints(res, output_style=self.output_style)

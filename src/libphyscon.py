@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 # libphyscon.py
 # physcon Physical constants
 # Note: type physcon.help() (after import physcon)
@@ -98,7 +98,7 @@ gamma_p =  all['gyromagratio-p'][2]
 h = all['planck'][2]
 hbar = all['dirac'][2]
 hbareV = all['diraceV'][2]
-k_B =  all['boltzmann'][2]
+k = k_B =  all['boltzmann'][2]
 k_BeV =  all['boltzmanneV'][2]
 m_d =  all['mass-d'][2]
 m_e =  all['mass-e'][2]

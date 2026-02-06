@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 """
 methods.py
 Created on Fri Mar 11 12:53:36 2022
@@ -112,6 +112,8 @@ class methods(branch):
         class cYnm:
             """
             Sub Formulary Class for Spherical Harmonics.
+            
+            display(*ometh.cYnm.Table())
             """
             def __init__(self):
                 self.name   = "Spherical Harmonics"
@@ -137,10 +139,12 @@ class methods(branch):
                 # Transformations from Polar to Cartesian Coordinates.
                 self.pol_to_cart_x = r*cos(theta)*C.i
                 self.pol_to_cart_y = r*sin(theta)*C.j
+                
                 # Transformations from Cylindrical to Cartesian Coordinates.
                 self.cyl_to_cart_x = r*sin(phi)*C.i
                 self.cyl_to_cart_y = r*sin(phi)*C.j
                 self.cyl_to_cart_z = z*C.k
+                
                 # Transformations from Spherical to Cartesian Coordinates.
                 self.sph_to_cart_x = r*sin(theta)*cos(phi)*C.i
                 self.sph_to_cart_y = r*sin(theta)*sin(phi)*C.j

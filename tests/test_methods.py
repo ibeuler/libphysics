@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 # ## test_methods.py
 
 """
@@ -49,9 +49,10 @@ class sets:
     """
     Setttings class.
         
-    Instead of settings class, settings nametuble might be used.
+    Instead of settings class, settings nametuple might be used.
     Settings = namedtuple("Settings", "type dropinf delta")
     sets = Settings(type="symbolic", dropinf=True, delta=0.1)
+    print(set.type)
     """
     global dictflow, test_all
     
