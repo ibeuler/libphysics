@@ -47,7 +47,7 @@ from IPython.display import display, HTML, Latex, Math
 from sympy.parsing.latex import parse_latex
 from sympy.parsing.sympy_parser import parse_expr
 from sympy.interactive import printing
-import torch
+
 printing.init_printing()
 
 from loguru import logger
@@ -57,12 +57,6 @@ import torch
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print('torch:', torch.__version__, '| cuda:', torch.version.cuda, '| cuda available:', torch.cuda.is_available(), '| device:', device)
 print('torch file:', getattr(torch, '__file__', None))
-
-import numpy as np
-import matplotlib.pyplot as plt
-from torchquad import Simpson, set_up_backend
-
-set_up_backend("torch", data_type="float64")
 
 # Sets global defaults for all plots
 plt.rcParams.update({
