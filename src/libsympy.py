@@ -50,14 +50,6 @@ from sympy.interactive import printing
 
 printing.init_printing()
 
-from loguru import logger
-logger.remove()
-
-import torch
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print('torch:', torch.__version__, '| cuda:', torch.version.cuda, '| cuda available:', torch.cuda.is_available(), '| device:', device)
-print('torch file:', getattr(torch, '__file__', None))
-
 # Sets global defaults for all plots
 plt.rcParams.update({
     'font.family': "serif",
