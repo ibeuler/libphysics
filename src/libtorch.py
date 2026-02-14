@@ -21,15 +21,30 @@ Usage
         )
 
         # Step 2: integrate many times (fast: pure torch, ~3-8 ms each)
-        re, im = torchquad_integrate(wigner, params_values=[1, 1, 1, 1], N=121**2)
+    re, im = torchquad_integrate(wigner, params_values=[1, 1, 1, 1], N=121)
 """
 from dataclasses import dataclass
+import sys
 from typing import List, Callable
 
 import numpy as np
 import torch
 from sympy import lambdify, Symbol, tan, cos, pi, oo, Integer
 
+from loguru import logger
+
+# Remove loguru's default handler only if user requests it via env var.
+# Set LIBPHYSICS_REMOVE_LOGURU=1 or "true"/"yes" to disable.
+def setup_logging(enable: bool = False, level: str = "INFO"):
+    """
+    By default, we remove all handlers (silence).
+    If enable=True, we add a standard output handler.
+    """
+    logger.remove() 
+    if enable:
+        logger.add(sys.stderr, level=level)
+
+setup_logging(enable=False) 
 
 # ---------------------------------------------------------------------------
 # Default torch module mapping for lambdify
@@ -75,7 +90,7 @@ class TorchExpr:
 # ---------------------------------------------------------------------------
 # torchify  —  expensive work done ONCE
 # ---------------------------------------------------------------------------
-def torchify(expr, variables, limits=None, params=None, eps=1e-8, modules=None):
+def torchify(expr, variables, limits=None, params=None, modules=None):
     """
     Convert a SymPy expression into a torch-compatible function via lambdify.
 
@@ -99,8 +114,6 @@ def torchify(expr, variables, limits=None, params=None, eps=1e-8, modules=None):
     params : list[sympy.Symbol] or None
         Extra symbolic parameters that appear in *expr* but are **not**
         integrated over.  If ``None``, inferred automatically.
-    eps : float
-        Small cutoff for mapping infinite limits (``±π/2 ∓ eps``).
     modules : list[dict] or None
         Custom lambdify module list.  ``None`` → default torch mapping.
 
@@ -139,7 +152,7 @@ def torchify(expr, variables, limits=None, params=None, eps=1e-8, modules=None):
             subs_map[v] = tan(t_v)
             jacobian *= 1 / cos(t_v) ** 2
             new_vars.append(t_v)
-            domain.append([float(-pi / 2 + eps), float(pi / 2 - eps)])
+            domain.append([float(-pi / 2), float(pi / 2)])
 
         elif lower != -oo and upper == oo:
             # (a, ∞) → v = a + tan²(t),  dv = 2 tan(t) sec²(t) dt
@@ -147,7 +160,7 @@ def torchify(expr, variables, limits=None, params=None, eps=1e-8, modules=None):
             subs_map[v] = lower + tan(t_v) ** 2
             jacobian *= 2 * tan(t_v) / cos(t_v) ** 2
             new_vars.append(t_v)
-            domain.append([0.0, float(pi / 2 - eps)])
+            domain.append([0.0, float(pi / 2)])
 
         elif lower == -oo and upper != oo:
             # (-∞, b) → v = b - tan²(t),  dv = -2 tan(t) sec²(t) dt
@@ -155,7 +168,7 @@ def torchify(expr, variables, limits=None, params=None, eps=1e-8, modules=None):
             subs_map[v] = upper - tan(t_v) ** 2
             jacobian *= -2 * tan(t_v) / cos(t_v) ** 2
             new_vars.append(t_v)
-            domain.append([0.0, float(pi / 2 - eps)])
+            domain.append([0.0, float(pi / 2)])
 
         else:
             # finite [a, b]
@@ -224,3 +237,228 @@ def torchquad_integrate(texpr, params_values=None, method=None, N=21):
     re = method.integrate(f_re, dim=texpr.dim, N=N, integration_domain=texpr.domain)
     im = method.integrate(f_im, dim=texpr.dim, N=N, integration_domain=texpr.domain)
     return re, im
+
+
+def _simpson_weights_1d(a: float, b: float, N: int, *, device=None, dtype=None) -> torch.Tensor:
+    """Return Simpson weights including the dx/3 scaling (shape: [N])."""
+    if N < 3 or (N % 2) == 0:
+        raise ValueError(f"Simpson rule requires odd N>=3; got N={N}")
+    dx = (b - a) / (N - 1)
+    w = torch.ones(N, device=device, dtype=dtype)
+    # 1, 4, 2, 4, ..., 2, 4, 1
+    w[1:-1:2] = 4
+    w[2:-1:2] = 2
+    w = w * (dx / 3.0)
+    return w
+
+
+def _is_scalar_like(x) -> bool:
+    """True for Python numbers / 0-d tensors."""
+    if torch.is_tensor(x):
+        return x.ndim == 0
+    return isinstance(x, (int, float, complex, np.number))
+
+
+def _normalize_params_values(params_values, n_params: int, *, device, dtype):
+    """Normalize params into (B, n_params) plus batch_shape.
+
+    Accepts:
+      - tensor of shape (..., n_params)
+      - list/tuple length n_params containing tensors and/or scalars
+
+    Scalars are broadcast to the inferred batch_shape.
+    """
+    if params_values is None:
+        if n_params != 0:
+            raise ValueError(f"Expected {n_params} params; got None")
+        return torch.empty((1, 0), device=device, dtype=dtype), tuple()
+
+    # Case A: tensor (..., n_params)
+    if torch.is_tensor(params_values):
+        params_tensor = params_values
+        if params_tensor.shape[-1] != n_params:
+            raise ValueError(
+                f"params_values last dimension must be n_params={n_params}; got shape={tuple(params_tensor.shape)}"
+            )
+        batch_shape = tuple(params_tensor.shape[:-1])
+        B = int(np.prod(batch_shape)) if batch_shape else 1
+        params_flat = params_tensor.reshape(B, n_params).to(device=device, dtype=dtype)
+        return params_flat, batch_shape
+
+    # Case B: list/tuple of params (scalars and/or tensors)
+    if not isinstance(params_values, (list, tuple)):
+        # single scalar treated as 1 param
+        params_values = [params_values]
+
+    if len(params_values) != n_params:
+        raise ValueError(f"Expected {n_params} params; got {len(params_values)}")
+
+    # Infer batch_shape from the first non-scalar param (or scalars-only => ())
+    batch_shape = None
+    for p in params_values:
+        if torch.is_tensor(p) and p.ndim > 0:
+            batch_shape = tuple(p.shape)
+            break
+        if not _is_scalar_like(p):
+            pt = torch.as_tensor(p)
+            if pt.ndim > 0:
+                batch_shape = tuple(pt.shape)
+                break
+    if batch_shape is None:
+        batch_shape = tuple()
+
+    # Broadcast all params to batch_shape, then stack
+    params_list = []
+    for p in params_values:
+        pt = torch.as_tensor(p, device=device)
+        if pt.ndim == 0:
+            if batch_shape:
+                pt = pt.expand(batch_shape)
+        else:
+            if tuple(pt.shape) != batch_shape:
+                raise ValueError(
+                    f"All parameter tensors must have the same shape; got {tuple(pt.shape)} vs {batch_shape}"
+                )
+        params_list.append(pt)
+
+    params_tensor = torch.stack(params_list, dim=-1).to(dtype=dtype)
+    B = int(np.prod(batch_shape)) if batch_shape else 1
+    params_flat = params_tensor.reshape(B, n_params)
+    return params_flat, batch_shape
+
+
+def torch_integrate_batched_simpson(
+    texpr: TorchExpr,
+    params_values,
+    *,
+    N: int = 121,
+    chunk_size_params: int = 256,
+    chunk_size_points: int | None = None,
+    device=None,
+    dtype=None,
+):
+    """Batched tensor-product Simpson integration for any dimension.
+
+    This integrates a ``TorchExpr`` over its finite domain using a tensor-product
+    Simpson rule with *N* points per dimension.
+
+    Supports a batch of parameter points (e.g. a 250x250 mesh) by keeping the
+    batch dimension and summing only over the sample grid.
+
+    Notes
+    -----
+    - The number of sample points grows as $N^{dim}$. For dim>3 this can become
+      very large quickly. Use smaller N and/or set ``chunk_size_points``.
+    - ``chunk_size_points`` trades more Python overhead for lower peak memory.
+
+    Parameters
+    ----------
+    texpr : TorchExpr
+        Output of ``torchify(..., limits=...)``.
+    params_values : tensor | list/tuple
+        Either a tensor of shape ``(..., n_params)`` or a list/tuple of length
+        ``n_params`` of tensors/scalars with broadcastable batch shapes.
+    N : int
+        Odd Simpson points per dimension.
+    chunk_size_params : int
+        Number of parameter points processed per chunk.
+    chunk_size_points : int | None
+        Optional number of sample points processed per chunk.
+
+    Returns
+    -------
+    re, im : torch.Tensor
+        Shapes match the parameter batch shape (e.g. 250x250).
+    """
+    if texpr.dim <= 0:
+        raise ValueError(f"texpr.dim must be positive; got dim={texpr.dim}")
+    if texpr.n_params < 0:
+        raise ValueError(f"texpr.n_params must be non-negative; got n_params={texpr.n_params}")
+    if len(texpr.domain) != texpr.dim:
+        raise ValueError(f"texpr.domain must have length dim={texpr.dim}; got {len(texpr.domain)}")
+
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if dtype is None:
+        dtype = torch.float32 if device.type == "cuda" else torch.float64
+
+    if chunk_size_params <= 0:
+        raise ValueError(f"chunk_size_params must be positive; got {chunk_size_params}")
+    if chunk_size_points is not None and chunk_size_points <= 0:
+        raise ValueError(f"chunk_size_points must be positive; got {chunk_size_points}")
+
+    params_flat, batch_shape = _normalize_params_values(
+        params_values,
+        texpr.n_params,
+        device=device,
+        dtype=dtype,
+    )
+    B = int(params_flat.shape[0])
+
+    # Build per-dimension coordinates and weights
+    coords_1d = []
+    weights_1d = []
+    for (a, b) in texpr.domain:
+        a = float(a)
+        b = float(b)
+        coords_1d.append(torch.linspace(a, b, N, device=device, dtype=dtype))
+        weights_1d.append(_simpson_weights_1d(a, b, N, device=device, dtype=dtype))
+
+    # Build full grid points (P, dim) and weights (P,)
+    # This is the most straightforward approach; chunk_size_points can reduce peak memory.
+    grid = torch.cartesian_prod(*coords_1d)  # (P, dim)
+    w = weights_1d[0]
+    for wi in weights_1d[1:]:
+        w = torch.kron(w, wi)
+    P = int(grid.shape[0])
+
+    if chunk_size_points is None:
+        chunk_size_points = P
+
+    re_out = torch.empty(B, device=device, dtype=dtype)
+    im_out = torch.empty(B, device=device, dtype=dtype)
+
+    # Evaluate in chunks over params and points
+    for start_p in range(0, B, chunk_size_params):
+        stop_p = min(B, start_p + chunk_size_params)
+        pc = params_flat[start_p:stop_p, :]  # (Bc, n_params)
+        param_args = [pc[:, i].unsqueeze(0) for i in range(texpr.n_params)]
+
+        re_acc = torch.zeros(stop_p - start_p, device=device, dtype=dtype)
+        im_acc = torch.zeros(stop_p - start_p, device=device, dtype=dtype)
+
+        for start_x in range(0, P, chunk_size_points):
+            stop_x = min(P, start_x + chunk_size_points)
+            g = grid[start_x:stop_x, :]  # (Px, dim)
+            ww = w[start_x:stop_x].unsqueeze(1)  # (Px, 1)
+
+            var_args = [g[:, i].unsqueeze(1) for i in range(texpr.dim)]
+            vals = texpr.func(*var_args, *param_args)
+            vals = torch.as_tensor(vals, device=device)
+
+            # Expect (Px, Bc) after broadcasting.
+            if vals.ndim == 1:
+                vals = vals.unsqueeze(1)
+            elif vals.ndim == 2 and vals.shape[0] == (stop_p - start_p) and vals.shape[1] == (stop_x - start_x):
+                # Sometimes lambdify might return (Bc, Px)
+                vals = vals.t().contiguous()
+
+            if vals.shape[0] != (stop_x - start_x) or vals.shape[1] != (stop_p - start_p):
+                raise RuntimeError(
+                    f"Unexpected integrand output shape {tuple(vals.shape)}; expected ({stop_x - start_x}, {stop_p - start_p})"
+                )
+
+            if torch.is_complex(vals):
+                re_acc += (ww * vals.real).sum(dim=0)
+                im_acc += (ww * vals.imag).sum(dim=0)
+            else:
+                re_acc += (ww * vals).sum(dim=0)
+                # im stays zero
+
+        re_out[start_p:stop_p] = re_acc
+        im_out[start_p:stop_p] = im_acc
+
+    re_out = re_out.reshape(batch_shape)
+    im_out = im_out.reshape(batch_shape)
+    return re_out, im_out
+
